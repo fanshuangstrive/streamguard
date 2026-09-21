@@ -21,6 +21,12 @@
             <div class="status-pill" id="statusPill">
                 <span class="dot" id="statusDot"></span>
                 <span id="statusText">未启动</span>
+                <button class="copy-btn" id="btnCopyAddr" title="复制代理地址" style="display:none;">⧉</button>
+            </div>
+            <div class="topbar-controls">
+                <button class="btn success btn-toggle" id="btnToggle">▶ 启动</button>
+                <button class="icon-btn" id="btnTheme" title="主题：跟随系统">🌓</button>
+                <button class="icon-btn" id="btnSettings" title="打开配置（修改后 Ctrl+S 保存）">⚙</button>
             </div>
             <div class="window-controls">
                 <button class="win-btn" id="btnMinimize" title="最小化">&#xE921;</button>
@@ -30,10 +36,74 @@
         </div>
     </header>
 
-    <main class="layout">
-        <!-- 左侧：配置区 -->
+    <!-- 主视图页：统计卡片 + 日志（运行期） -->
+    <main class="view view-main" id="viewMain">
+        <section class="main-view">
+            <div class="stats-panel panel">
+                <div class="cards">
+                    <div class="card">
+                        <span class="card-label">累计请求</span>
+                        <span class="card-value" id="statTotal">0</span>
+                        <svg class="sparkline" id="sparkTotal" viewBox="0 0 100 24" preserveAspectRatio="none"></svg>
+                    </div>
+                    <div class="card">
+                        <span class="card-label">等待次数</span>
+                        <span class="card-value" id="statWaited">0</span>
+                    </div>
+                    <div class="card clickable" id="cardRate" title="点击筛选限流日志">
+                        <span class="card-label">当前速率</span>
+                        <span class="card-value" id="statRate">-</span>
+                    </div>
+                    <div class="card" id="cardBreaker">
+                        <span class="card-label">熔断状态</span>
+                        <span class="card-value card-value-sm" id="statBreaker">-</span>
+                    </div>
+                </div>
+                <div class="addr-line">
+                    <span class="addr-label">代理地址</span>
+                    <code id="statAddr">未启动</code>
+                    <span class="empty-guide" id="emptyGuide" style="display:none;">
+                        将你的客户端指向代理地址即可开始
+                    </span>
+                </div>
+            </div>
+
+            <div class="panel log-panel">
+                <div class="log-head">
+                    <h2>日志</h2>
+                    <div class="log-filters">
+                        <select id="logFilter" title="按级别筛选">
+                            <option value="all">全部</option>
+                            <option value="info">信息</option>
+                            <option value="warn">警告</option>
+                            <option value="error">错误</option>
+                        </select>
+                        <input id="logSearch" type="text" placeholder="搜索关键词…"/>
+                        <label class="checkbox-label">
+                            <input id="logShowRequests" type="checkbox" checked/>
+                            <span>显示请求日志</span>
+                        </label>
+                        <label class="checkbox-label log-autoscroll">
+                            <input id="logAutoScroll" type="checkbox" checked/>
+                            <span>自动滚动</span>
+                        </label>
+                        <button class="btn tiny ghost" id="btnClearLogs">清空</button>
+                    </div>
+                </div>
+                <div class="log-list" id="logList">
+                    <div class="log-empty">暂无日志</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 配置页（点 ⚙ 切换，独立全屏视图） -->
+    <main class="view view-config hidden" id="viewConfig">
         <section class="panel config-panel">
-            <h2>配置</h2>
+            <div class="config-head">
+                <h2>配置</h2>
+                <span class="cfg-hint">修改后需保存并应用；代理运行中保存会自动重启生效</span>
+            </div>
 
             <!-- ===== 分组 1：基础连接 ===== -->
             <div class="cfg-group">
@@ -46,6 +116,7 @@
                         <label for="upstream">上游地址</label>
                         <input id="upstream" type="text" placeholder="https://api.example.com"/>
                         <small>请求路径原样转发：<code>/model/v1/chat/completions</code> → <code>上游/model/v1/chat/completions</code></small>
+                        <small class="field-error" hidden></small>
                     </div>
 
                     <div class="row">
@@ -53,6 +124,7 @@
                             <label for="listen">监听地址</label>
                             <input id="listen" type="text" placeholder="127.0.0.1:8080"/>
                             <small>默认仅本机可访问，不暴露局域网</small>
+                            <small class="field-error" hidden></small>
                         </div>
                         <div class="field">
                             <label for="timeout">请求超时</label>
@@ -122,11 +194,13 @@
                             <label for="sizeLimitSmallConcurrent">小请求最大并发</label>
                             <input id="sizeLimitSmallConcurrent" type="number" min="0" step="1" value="0"/>
                             <small>0 = 不限制</small>
+                            <small class="field-error" hidden></small>
                         </div>
                         <div class="field">
                             <label for="sizeLimitLargeConcurrent">大请求最大并发</label>
                             <input id="sizeLimitLargeConcurrent" type="number" min="0" step="1" value="0"/>
                             <small>0 = 不限制；两项不能同时为 0</small>
+                            <small class="field-error" hidden></small>
                         </div>
                     </div>
                 </div>
@@ -226,58 +300,23 @@
             </details>
 
             <div class="actions">
-                <button class="btn primary" id="btnSave">保存配置</button>
+                <span class="dirty-hint" id="dirtyHint" style="display:none;">● 未保存更改</span>
+                <button class="btn primary" id="btnSave">保存并应用</button>
                 <button class="btn ghost" id="btnReload">重新加载</button>
+                <button class="btn ghost" id="btnBackMain">返回主视图</button>
             </div>
-        </section>
-
-        <!-- 右侧：状态 + 日志 -->
-        <section class="right-col">
-            <div class="panel stats-panel">
-                <h2>运行状态</h2>
-                <div class="cards">
-                    <div class="card">
-                        <span class="card-label">累计请求</span>
-                        <span class="card-value" id="statTotal">0</span>
-                    </div>
-                    <div class="card">
-                        <span class="card-label">等待次数</span>
-                        <span class="card-value" id="statWaited">0</span>
-                    </div>
-                    <div class="card">
-                        <span class="card-label">当前速率</span>
-                        <span class="card-value" id="statRate">-</span>
-                    </div>
-                </div>
-                <div class="addr-line">
-                    <span class="addr-label">代理地址</span>
-                    <code id="statAddr">未启动</code>
-                </div>
-            </div>
-
-            <div class="panel log-panel">
-                <div class="log-head">
-                    <h2>日志</h2>
-                    <button class="btn tiny ghost" id="btnClearLogs">清空</button>
-                </div>
-                <div class="log-list" id="logList">
-                    <div class="log-empty">暂无日志</div>
-                </div>
-            </div>
-        </section>
+        </aside>
     </main>
 
-    <!-- 底部操作栏 -->
+    <!-- 底部信息栏 -->
     <footer class="bottombar">
         <div class="hint" id="configPath"></div>
         <div class="hint" id="logPath"></div>
-        <div class="footer-actions">
-            <button class="btn success" id="btnStart">启动代理</button>
-            <button class="btn danger" id="btnStop" disabled>停止代理</button>
-        </div>
     </footer>
 </div>
 
-<script src="./src/main.js" type="module"></script>
+<div id="toastWrap"></div>
+
+<script src="./src/main.ts" type="module"></script>
 </body>
 </html>

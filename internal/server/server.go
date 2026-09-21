@@ -42,6 +42,9 @@ type Options struct {
 	// VerboseLogger 是详细日志的输出目标，可选。
 	// 为 nil 时回退到 Logger。GUI 模式下可单独指向控制台，避免污染界面日志面板。
 	VerboseLogger *log.Logger
+	// OnRequest 是逐请求基础信息的回调，可选。为 nil 时不产生任何额外开销（CLI 默认）。
+	// GUI 模式下用于把方法/路径/状态码/耗时/是否排队上报到界面日志面板。
+	OnRequest onRequestFunc
 }
 
 // Server 是 StreamGuard 的 HTTP 服务。
@@ -52,6 +55,7 @@ type Server struct {
 	maxWait       time.Duration
 	logger        *log.Logger
 	verboseLogger *log.Logger
+	onRequest     onRequestFunc
 	mux           *http.ServeMux
 	verbose       bool
 }
@@ -76,6 +80,7 @@ func New(opts Options) *Server {
 		maxWait:       opts.MaxWait,
 		logger:        logger,
 		verboseLogger: verboseLogger,
+		onRequest:     opts.OnRequest,
 		mux:           http.NewServeMux(),
 		verbose:       opts.Verbose,
 	}
@@ -100,6 +105,31 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 
+	// 请求钩子：用一个只记录状态码、其余全透传的包装器捕获最终响应码。
+	// 仅当注册了钩子时启用（CLI 无钩子，零开销）；放在最外层以覆盖限流早退路径。
+	var stat *statusRecorder
+	if s.onRequest != nil {
+		stat = newStatusRecorder(w)
+		w = stat
+	}
+
+	// 累计限流等待时长（速率限流 + 并发限流），用于面板「排队」标记。
+	var waitDur time.Duration
+
+	defer func() {
+		if s.onRequest == nil {
+			return
+		}
+		s.onRequest(RequestEvent{
+			Method:   r.Method,
+			Path:     r.URL.Path,
+			Status:   stat.status,
+			Elapsed:  time.Since(start),
+			Waited:   waitDur >= requestWaitMarkThreshold,
+			WaitTime: waitDur,
+		})
+	}()
+
 	// 详细模式：打印请求行、请求头与请求体。
 	if s.verbose {
 		s.logRequest(r)
@@ -115,7 +145,10 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	// 1. 速率限流等待
 	if s.waiter != nil {
-		if err := s.waiter.Wait(ctx); err != nil {
+		t0 := time.Now()
+		err := s.waiter.Wait(ctx)
+		waitDur += time.Since(t0)
+		if err != nil {
 			s.writeRateLimitError(w, r, err)
 			return
 		}
@@ -124,7 +157,9 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 	// 2. 按请求大小分档的并发限流
 	if s.concurrency != nil {
 		tokens := limiter.EstimateTokens(s.peekBody(r))
+		t0 := time.Now()
 		release, err := s.concurrency.Acquire(ctx, tokens)
+		waitDur += time.Since(t0)
 		if err != nil {
 			s.writeRateLimitError(w, r, err)
 			return

@@ -52,11 +52,13 @@ internal/server       HTTP 服务（路由、限流编排、详细日志）
 
 ### 3.3 前端（GUI）
 
-- 原生 HTML/CSS/JS，**不引入任何前端框架**（React/Vue 等）
-- 构建仅依赖 Vite；`package-lock.json` 已被 gitignore（含内网私服地址，禁止提交）
-- 新增配置项时必须同步修改三处：`index.html`（输入框）、`main.js`（el/collectConfig/fillConfig）、`wailsjs/go/models.ts`（绑定字段）
-- 界面文案用中文；深色主题，遵循 `style.css` 既有变量（`--panel`、`--accent` 等）
+- **TypeScript + 原生 DOM**，**不引入任何前端框架**（React/Vue 等）；类型检查由 `tsc` 负责
+- 源码位于 `frontend/src/`，按职责分模块：`main.ts`（表单/轮询/事件）、`theme.ts`（三态主题）、`toast.ts`（通知）
+- 构建仅依赖 Vite（自动编译 TS）；`package-lock.json` 已被 gitignore（含内网私服地址，禁止提交）
+- 新增配置项时必须同步修改三处：`index.html`（输入框）、`main.ts`（el/collectConfig/fillConfig）、`wailsjs/go/models.ts`（绑定字段）
+- 界面文案用中文；**双主题**（深色默认 + 浅色），颜色一律走 `style.css` 的 CSS 变量，禁止硬编码色值
 - 布局需自适应：使用 `minmax(0, 1fr)`，窄屏（<980px）单列堆叠，操作按钮 sticky 固定
+- 前端静态检查：`npm run lint`（ESLint 语法级）+ `npm run typecheck`（tsc 类型检查），两者均须无输出
 
 ## 4. 配置项新增规范
 
@@ -70,7 +72,7 @@ internal/server       HTTP 服务（路由、限流编排、详细日志）
 | 4 | `docs/configuration.md` | 配置项表格 + 详细说明 |
 | 5 | `README.md` | JSON 示例 + 配置项简表 |
 | 6 | GUI `index.html` | 输入框 + 说明文案 |
-| 7 | GUI `main.js` | el 映射 + collectConfig + fillConfig |
+| 7 | GUI `main.ts` | el 映射 + collectConfig + fillConfig |
 | 8 | GUI `models.ts` | Wails 绑定字段 |
 | 9 | 测试 | 默认值、归一化、校验、环境变量覆盖各至少 1 个用例 |
 
@@ -249,7 +251,7 @@ func TestProxy_MaxConns_LimitsConcurrency(t *testing.T) // httptest 上游验证
 | 4 | `docs/configuration.md` | 表格加一行 + 详细说明 |
 | 5 | `README.md` | JSON 示例 + 配置简表 |
 | 6 | GUI `index.html` | 新增输入框 + 说明文案 |
-| 7 | GUI `main.js` | el 映射 + collectConfig + fillConfig |
+| 7 | GUI `main.ts` | el 映射 + collectConfig + fillConfig |
 | 8 | GUI `models.ts` | 绑定字段 `maxConns` |
 | 9 | 测试 | ✅ 第 2 步已写 |
 
@@ -299,7 +301,7 @@ git grep -n -i -E "h[a]ier\.net|model[a]pi-test|api[k]ey-695f|695f046[7]" -- cmd
   M  docs/development-log.md
   M  README.md
   M  cmd/streamguard-gui/frontend/index.html
-  M  cmd/streamguard-gui/frontend/main.js
+  M  cmd/streamguard-gui/frontend/src/main.ts
   M  cmd/streamguard-gui/frontend/wailsjs/go/models.ts
 
 commit message：

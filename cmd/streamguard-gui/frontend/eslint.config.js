@@ -1,19 +1,21 @@
 // ESLint 配置（扁平配置格式，ESLint 9+）
 //
-// 目标：对原生 JS 前端做**语法级**检查，不引入任何框架或运行时依赖。
-// 只启用「可能出错」的规则，不做风格强制（风格交给编辑器/格式化工具）。
+// 目标：对前端 TS 源码做**语法级**检查，不引入任何框架或运行时依赖。
+// 只启用「可能出错」的规则，不做风格强制（风格交给 tsc + 编辑器）。
 //
 // 用法：
 //   cd cmd/streamguard-gui/frontend
-//   npx eslint src/
+//   npm run lint
 //
-// 注意：本配置不加入 package.json 的 devDependencies（保持零依赖），
-// 需要时用 npx 临时拉取 eslint 即可。
+// 注意：类型检查由 tsc 负责（npm run typecheck），ESLint 只做语法级规则。
+
+import parser from "@typescript-eslint/parser";
 
 export default [
   {
-    files: ["src/**/*.js"],
+    files: ["src/**/*.ts"],
     languageOptions: {
+      parser,
       ecmaVersion: 2022,
       sourceType: "module",
       globals: {
@@ -36,7 +38,7 @@ export default [
     },
     rules: {
       // 可能出错的规则（error）
-      "no-undef": "error",
+      "no-undef": "off", // TS 自身负责未定义变量检查
       "no-unused-vars": [
         "warn",
         {

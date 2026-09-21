@@ -47,6 +47,10 @@ type App struct {
 	// verboseFile 是详细日志文件句柄，非 nil 时需在停止时关闭。
 	verboseFile *os.File
 
+	// requestHook 是逐请求基础信息的回调，供 GUI 日志面板展示。
+	// 为 nil 时不向 server 注册钩子（CLI 默认，零开销）。由 mu 保护。
+	requestHook RequestLogFunc
+
 	httpServer  *http.Server
 	listener    net.Listener
 	waiter      *limiter.Waiter
@@ -83,6 +87,35 @@ func (a *App) SetVerboseLogger(logger *log.Logger) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.verboseLogger = logger
+}
+
+// RequestLogFunc 是逐请求基础信息的回调签名。
+//
+// 参数均为基本类型，使调用方（GUI）无需 import server 包。
+// elapsed 为请求总耗时，waited 表示是否因限流发生过排队。
+type RequestLogFunc func(method, path string, status int, elapsed time.Duration, waited bool)
+
+// SetRequestLogHook 注册逐请求基础信息回调，用于界面日志面板展示 API 基础信息。
+//
+// 传入 nil 取消注册。必须在 Start 之前调用；重启（UpdateConfig）时会沿用该回调。
+// 注意：回调仅含方法/路径/状态码/耗时，不含请求/响应内容，符合「详细日志不进面板」红线。
+func (a *App) SetRequestLogHook(fn RequestLogFunc) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.requestHook = fn
+}
+
+// newRequestForwarder 将基本类型回调适配为 server 的 RequestEvent 回调。
+//
+// hook 为 nil 时返回 nil，使 server 走零开销路径（不包裹 ResponseWriter）。
+// 返回的函数类型与 server.Options.OnRequest 底层类型一致，可直接赋值。
+func newRequestForwarder(hook RequestLogFunc) func(server.RequestEvent) {
+	if hook == nil {
+		return nil
+	}
+	return func(e server.RequestEvent) {
+		hook(e.Method, e.Path, e.Status, e.Elapsed, e.Waited)
+	}
 }
 
 // setupVerboseLogger 根据配置决定详细日志的输出目标。
@@ -273,6 +306,7 @@ func (a *App) Start() error {
 		Logger:        a.logger,
 		Verbose:       a.cfg.LogLevel == "debug",
 		VerboseLogger: a.verboseLogger,
+		OnRequest:     newRequestForwarder(a.requestHook),
 	})
 
 	// 先监听，以便获取实际端口（支持 :0 随机端口）

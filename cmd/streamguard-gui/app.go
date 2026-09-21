@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -22,6 +23,7 @@ import (
 type LogEntry struct {
 	Time    string `json:"time"`    // 时间 HH:MM:SS
 	Level   string `json:"level"`   // 级别 info/warn/error
+	Source  string `json:"source"`  // 来源 system（生命周期）/request（逐请求）
 	Message string `json:"message"` // 内容
 }
 
@@ -96,7 +98,14 @@ func (a *App) startup(ctx context.Context) {
 	//   - log_file 为空 → 控制台（GUI 无控制台时被系统丢弃）
 	//   - log_file 非空 → 写入文件（推荐 GUI 场景使用）
 	// 无论哪种方式，都不会进入界面日志面板，避免刷屏。
+	// 注册逐请求基础信息钩子：只上报方法/路径/状态码/耗时/是否排队，
+	// 不含请求体与响应体，供前端「显示请求日志」开关过滤展示。
+	core := a.core
 	a.mu.Unlock()
+
+	core.SetRequestLogHook(func(method, path string, status int, elapsed time.Duration, waited bool) {
+		a.addRequestLog(method, path, status, elapsed, waited)
+	})
 
 	a.addLog("info", fmt.Sprintf("config file: %s", a.cfgPath))
 	a.addLog("info", "StreamGuard ready")
@@ -168,19 +177,46 @@ func (a *App) writeConfig(cfg *config.Config) error {
 	return os.WriteFile(a.cfgPath, data, 0o600)
 }
 
-// addLog 追加一条日志（保留最近 500 条）。
+// addLog 追加一条生命周期日志（来源 system，保留最近 500 条）。
 func (a *App) addLog(level, msg string) {
+	a.addLogEntry(level, "system", msg)
+}
+
+// addLogEntry 追加一条指定来源的日志（保留最近 500 条）。
+func (a *App) addLogEntry(level, source, msg string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	a.logs = append(a.logs, LogEntry{
 		Time:    time.Now().Format("15:04:05"),
 		Level:   level,
+		Source:  source,
 		Message: msg,
 	})
 	if len(a.logs) > 500 {
 		a.logs = a.logs[len(a.logs)-500:]
 	}
+}
+
+// addRequestLog 将一次请求的基础信息映射为日志并写入面板（来源 request）。
+//
+// 级别按状态码归类：>=500 为 error，429 或 >=400 为 warn，其余为 info。
+// 排队/限流标记：命中速率或并发等待（waited）时追加「排队」提示。
+// 仅含方法/路径/状态码/耗时，不含请求体与响应体（符合开发规范第 9 节）。
+func (a *App) addRequestLog(method, path string, status int, elapsed time.Duration, waited bool) {
+	level := "info"
+	switch {
+	case status >= 500:
+		level = "error"
+	case status == http.StatusTooManyRequests || status >= 400:
+		level = "warn"
+	}
+
+	msg := fmt.Sprintf("%s %s → %d · %s", method, path, status, elapsed.Round(time.Millisecond))
+	if waited {
+		msg += " · 排队"
+	}
+	a.addLogEntry(level, "request", msg)
 }
 
 // ---------- 以下方法暴露给前端 ----------

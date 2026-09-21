@@ -60,6 +60,7 @@ export namespace main {
 	export class LogEntry {
 	    time: string;
 	    level: string;
+	    source: string;
 	    message: string;
 	
 	    static createFrom(source: any = {}) {
@@ -70,6 +71,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.time = source["time"];
 	        this.level = source["level"];
+	        this.source = source["source"];
 	        this.message = source["message"];
 	    }
 	}

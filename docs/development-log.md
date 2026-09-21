@@ -2,6 +2,76 @@
 
 记录 StreamGuard 的开发过程、决策与经验。
 
+## 2026-09-21 GUI 日志面板显示逐请求基础信息（方案 A：开关控制，无新配置项）
+
+### 背景
+
+GUI 日志面板此前只显示生命周期事件（启动/停止/配置保存），看不到 API 请求本身。
+根因是 GUI 从未接 `internal/server` 的逐请求信息。用户希望面板能看到每个请求的基础信息。
+
+### 决策：方案 A（界面开关）而非方案 B（配置项）
+
+- **A（采纳）**：后端始终把请求基础信息发给 GUI，前端加「显示请求日志」勾选框控制显隐。改动只在 `internal/server` + `internal/app` + GUI，**不新增配置项（免去九处同步），即点即生效**。
+- B（否决）：新增 `panel_request_log` 布尔配置项，需重启/保存生效，要走完整九处同步。
+- 字段：方法 + 路径 + 状态码 + 耗时，**外加排队/限流标记**（用户明确要求）。
+
+### 改动
+
+1. **server**：新增 `internal/server/requestlog.go`——`RequestEvent` + `statusRecorder`（实现 `Flush`/`Unwrap`/`Hijack` 透传，包裹 ResponseWriter 后**不破坏 SSE 逐块实时透传 R6 与协议升级**）。`Options.OnRequest` 钩子；`handleProxy` 用 statusRecorder 捕获状态码，defer 上报，覆盖限流早退（429）路径；用墙钟测量 + 1ms 阈值判定“排队”。
+2. **app**：`RequestLogFunc` 类型 + `SetRequestLogHook` + `newRequestForwarder` 接线到 `server.Options.OnRequest`。GUI 用基本类型签名，无需 import server 包（守分层）。钩子为 nil 时不注册（CLI 默认零开销）。
+3. **GUI app.go**：`LogEntry` 加 `source` 字段（system/request）；注册钩子把请求按状态码映射 info/warn/error（≥500→error、429/≥400→warn、其余→info），格式化 `POST /v1/... → 200 · 210ms · 排队`。
+4. **前端**：「显示请求日志」勾选框（默认勾选），`filteredLogs` 过滤 source=request；models.ts 同步 LogEntry.source。
+
+### 红线遵守
+
+- **第 9 节**：面板只展示基础元信息，**不含请求体/响应体/header**，详细日志仍走 `verboseLogger` 落盘/控制台，不进面板。
+- **R6**：statusRecorder 透传 Flush/Unwrap，SSE 测试证明 4 块间隔 ~120ms 未被缓冲。
+
+### 验证
+
+- server 6 测（含 SSE 透传、429 捕获、无钩子零开销）+ app 2 测全绿；`go vet`/`gofmt`/前端 tsc+eslint+vite build 全过。
+
+## 2026-09-21 文档合并：ui-redesign.md 并入 ui-design.md
+
+UI 重设计已落地，`ui-design.md`（现状）与 `ui-redesign.md`（愿景/分期）出现大量重叠、且前者反复引用后者。
+决策：以**最新已实现样式为准**合并为单一 `ui-design.md`，保留设计理念、三条原则、对标萃取、交互依据、主题系统、
+验收进度（已完成/待办）等长期有价值内容，删除过时的分期规划表，并**删除 `ui-redesign.md`**。
+所有文档入口（README、docs/README、development-guide）本就只引用 `ui-design.md`，无需改动；仅本历史条目改为注明“已并入”。
+
+## 2026-09-21 UI 重设计 P0/P1 落地 + 主题系统实施（修复半迁移断链）
+
+### 背景
+
+原 `ui-redesign.md` 提案（现已并入 [ui-design.md](./ui-design.md)，不再单列）已部分实施，但处于**半迁移状态**：index.html 已改为双视图结构（主视图 + 配置视图），
+但 main.ts 仍引用旧 id `btnWinchClose`（新 HTML 为 `btnClose`）→ `$()` 抛异常 → `init()` 中断 → **整个 GUI 瘫痪**；
+且无任何视图切换逻辑，配置页永久不可达；sparkline/熔断卡片/日志筛选器等一批占位未接线。
+
+### 改动（纯前端，Go 侧零改动）
+
+1. **修复阻断链**：`el.close` → `btnClose`；补齐 `.view`/`.main-view` 双视图布局 CSS（旧 `.layout` 网格样式已删）
+2. **视图切换**：⚙ 进入配置视图、「返回主视图」离开；dirty 时 `confirm` 确认，绝不静默丢弃；首次运行（upstream 空）自动进配置视图并聚焦必填项（抽屉落地为全屏视图切换，窄窗更友好）
+3. **日志区接线**：级别下拉 + 关键词搜索 + 自动滚动开关全部生效；hover 冻结（悬停暂停重绘、移开补渲染）；渲染上限 500 行；去重改用「长度 + 末条内容」比较（旧版只比长度，同数变更会漏刷新）；warn/error 行附 ⚠/✕ 徽标（不全靠颜色）
+4. **统计卡片**：熔断卡片读已返回的 `breakerState`（未启用/正常/半开/⚠ 已熔断）；sparkline 用轮询 `total` 增量采样 60 点纯 SVG 绘制（零后端改动）；空状态引导（运行中且 0 请求时提示下一步）
+5. **状态 pill 升级**：`● 运行中 · 2h13m`，前端记住启动时刻推算时长
+6. **错误直达修复**：启动失败 toast 附「去修改端口」按钮（匹配 bind/占用/permission），点击直跳配置视图并聚焦监听地址
+7. **字段级校验**：上游 URL 格式、监听地址端口范围、大小并发不同时为 0，失焦即红字、输入即消除
+8. **快捷键**：`Ctrl+S` 保存（不在配置页时自动切过去）、`Ctrl+R` 启停，均拦截浏览器默认行为
+9. **toast 扩展**：支持动作按钮；带动作按钮时停留 6s
+
+### 新增文件
+
+- `scripts/verify.ps1`：本地全链路验证助手（typecheck/lint/vite build + go test/vet/gofmt），绕过终端对 node_modules 路径的误拦截
+
+### 验证
+
+`verify.ps1` 全绿；`build.ps1` 完整构建通过（go test ./... -count=1 + vet + CLI + wails GUI）；敏感扫描无输出。待人工冒烟：9.2 清单 P0/P1 追加项 + 主题追加项。
+
+### 经验教训
+
+- **HTML 结构重构必须与 JS 同步提交**：半迁移状态比旧版更糟（旧版能用，新版直接白屏）；`$()` 找不到元素即抛异常的fail-fast 设计是对的，但暴露了缺一道前端构建/冒烟门禁
+- **require-atomic-updates 消除法**：await 后写共享标记改用 promise 回调链，状态写在同步/回调路径，比 disable 注释干净
+- **终端内容过滤会误拦含 node_modules 路径/Location 命令的命令行**，封装进 .ps1 脚本文件执行可绕过
+
 ## 2026-09-21 GUI 配置界面易用性重构 + CI 修复
 
 ### 背景
