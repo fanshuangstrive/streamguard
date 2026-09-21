@@ -24,6 +24,7 @@ import {
 } from "../wailsjs/go/main/App.js";
 import { showToast } from "./toast.js";
 import { initTheme } from "./theme.js";
+import { initAbout } from "./about.js";
 
 // ---------- DOM 引用 ----------
 
@@ -64,6 +65,7 @@ const el = {
     btnBackMain: $("btnBackMain") as HTMLButtonElement,
     btnToggle: $("btnToggle") as HTMLButtonElement,
     btnSettings: $("btnSettings") as HTMLButtonElement,
+    btnAbout: $("btnAbout") as HTMLButtonElement,
     btnCopyAddr: $("btnCopyAddr") as HTMLButtonElement,
     dirtyHint: $("dirtyHint"),
     btnClearLogs: $("btnClearLogs") as HTMLButtonElement,
@@ -644,6 +646,7 @@ el.topbar.addEventListener("dblclick", (e) => {
 
 async function init(): Promise<void> {
     initTheme($("btnTheme") as HTMLButtonElement);
+    initAbout(el.btnAbout);
     await loadConfig();
     syncToggleGroups();
     await refreshStatus();

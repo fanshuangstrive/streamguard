@@ -53,7 +53,7 @@ internal/server       HTTP 服务（路由、限流编排、详细日志）
 ### 3.3 前端（GUI）
 
 - **TypeScript + 原生 DOM**，**不引入任何前端框架**（React/Vue 等）；类型检查由 `tsc` 负责
-- 源码位于 `frontend/src/`，按职责分模块：`main.ts`（表单/轮询/事件）、`theme.ts`（三态主题）、`toast.ts`（通知）
+- 源码位于 `frontend/src/`，按职责分模块：`main.ts`（表单/轮询/事件）、`theme.ts`（三态主题）、`toast.ts`（通知）、`about.ts`（关于弹窗）
 - 构建仅依赖 Vite（自动编译 TS）；`package-lock.json` 已被 gitignore（含内网私服地址，禁止提交）
 - 新增配置项时必须同步修改三处：`index.html`（输入框）、`main.ts`（el/collectConfig/fillConfig）、`wailsjs/go/models.ts`（绑定字段）
 - 界面文案用中文；**双主题**（深色默认 + 浅色），颜色一律走 `style.css` 的 CSS 变量，禁止硬编码色值
@@ -190,6 +190,16 @@ test: 测试补充
 - 新增绑定方法三处同步：Go 方法 → `wailsjs/go/main/App.js` → `App.d.ts`
 - 窗口默认最大化（`WindowStartState: options.Maximised`），布局自适应（见 3.3）
 - 底部栏展示工作路径（配置文件 + 日志位置），方便用户查看或清理
+
+### 9.1 GUI 交付流程（每次交付前必做）
+
+Wails 对自定义 JSON 序列化类型（如 `config.Duration`）的绑定推导有误，`wails build` 会**错误重生成 `wailsjs/` 绑定**，因此 GUI 改动交付前按序执行：
+
+1. `wails build` 重新编译，产物在 `cmd/streamguard-gui/build/bin/streamguard-gui.exe`
+2. **还原生成物 churn**：`git checkout -- ":(glob)**/wailsjs/**"`。构建会把 `max_wait`/`timeout`/`breaker_cooldown`/`retry_*_wait` 等 `Duration` 字段从正确的 `string` 改成 `number`（Go 侧 `MarshalJSON` 实际输出字符串），不还原会导致 `npm run typecheck` 失败
+3. **刷新根目录 exe**：把 `build/bin/streamguard-gui.exe` 覆盖复制到仓库根目录 `streamguard-gui.exe`，保证根目录运行副本是最新构建（覆盖前先结束运行中的 `streamguard-gui` 进程，否则文件被锁）
+4. 跑 `scripts/verify.ps1` 全链路（含前端 typecheck/lint/build + go test/vet/gofmt）
+5. 提交清单**不含** `*.exe` 与 `dist/`（均为产物，已 gitignore）；根目录 exe 仅本地运行用
 
 ## 10. 新增功能自查清单
 

@@ -939,3 +939,93 @@ input.invalid {
 .toast-action:hover {
     background: var(--accent-soft);
 }
+
+/* ---------- 关于弹窗 ---------- */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.45);
+    padding: 20px;
+}
+
+.modal-overlay.show {
+    display: flex;
+    animation: modal-fade 0.15s ease-out;
+}
+
+.modal {
+    width: 100%;
+    max-width: 400px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
+}
+
+.modal-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+}
+
+.modal-head h2 {
+    font-size: 15px;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0.3px;
+    color: var(--text);
+    margin: 0;
+    flex: 1;
+}
+
+.modal-close {
+    width: 28px;
+    height: 28px;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.modal-body {
+    padding: 18px;
+}
+
+.about-tagline {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+}
+
+.about-meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 14px;
+    font-size: 13px;
+    margin-bottom: 14px;
+}
+
+.about-meta dt {
+    color: var(--text-dim);
+}
+
+.about-meta dd {
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+
+.about-desc {
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--text-faint);
+}
+
+@keyframes modal-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}

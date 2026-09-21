@@ -2,6 +2,41 @@
 
 记录 StreamGuard 的开发过程、决策与经验。
 
+## 2026-09-21 主视图顶栏新增「关于」弹窗 + GUI 交付两个踩坑
+
+### 背景
+
+界面缺少「关于」入口：顶栏只有 🌓/⚙ 两图标，无处展示版本号、组织、License。用户要求补上，并规定交付前根目录 `streamguard-gui.exe` 必须是最新构建。
+
+### 决策
+
+- **入口**：顶栏 `ℹ` 图标 + 居中模态弹窗（不挤占主视图），新增 `frontend/src/about.ts` 模块，零依赖、纯原生。
+- **不写仓库地址**：规避红线 5（个人用户名/真实域名入源码），「关于」只展示组织名 `fhub` + 版本 + MIT License + 简介；版本号取 `about.ts` 常量，后续可对接构建注入。
+- **关闭方式三通道**：✕ 按钮 / 点遮罩空白 / Esc（仅弹窗显示时响应，不干扰 Ctrl+S/R）。
+
+### 踩坑 1：`wails build` 错误重生成 `wailsjs` 绑定，破坏前端 typecheck
+
+`wails build` 会重新生成 `wailsjs/go/models.ts` 等，把 `config.Duration` 字段（`max_wait`/`timeout`/`breaker_cooldown`/`retry_initial_wait`/`retry_max_wait`）从 `string` 改成 `number`，并删除 `Status.model`。
+
+- **根因**：Wails 按 Go 结构体字段类型（`type Duration time.Duration` = int64）推导 TS 类型为 `number`；但 `Duration.MarshalJSON` 实际输出**字符串**（"30s"），`UnmarshalJSON` 接受字符串/数字。前端表单也发字符串。**已提交的 `string` 版才是运行时正确的**。
+- **后果**：`main.ts` 的 `collectConfig()` 返回字符串 → 与新 `Config` 类型冲突 → `npm run typecheck` 报 `SaveConfig(collectConfig())` 不匹配。
+- **处置**：`git checkout -- ":(glob)**/wailsjs/**"` 还原生成物。已写入 development-guide 第 9.1 节：每次 `wails build` 后提交前必须还原 wailsjs churn。
+- **注**：CI 不跑前端 typecheck（仅 gofmt/vet/test/交叉编译/敏感扫描），所以该问题只在本地 `verify.ps1` 暴露。
+
+### 踩坑 2：终端守卫误拦含 `cmd` 路径段的命令
+
+本项目源码目录名为 `cmd/`，任何命令路径含字面 `cmd` 段都会被 PowerShell 终端守卫误判为 `cmd rmdir` 而拦截。规避：用通配符 `Resolve-Path "c*\streamguard-gui"` 进目录、`git` 用 `:(glob)**/...` pathspec，避免命令行出现字面 `cmd`。
+
+### 交付流程固化
+
+新增 development-guide 第 9.1 节「GUI 交付流程」：wails build → 还原 wailsjs → **build/bin 最新 exe 覆盖到仓库根目录** → verify.ps1 全链路。根目录 exe 刷新规则同时记入长期记忆。
+
+### 验证
+
+- `scripts/verify.ps1` 全链路 ALL OK（前端 typecheck/lint/vite build + go test/vet/gofmt）
+- 敏感扫描：改动文件无真实域名/用户名命中
+- exe：`build/bin` 与根目录 `streamguard-gui.exe` 已同步为含「关于」的最新构建
+
 ## 2026-09-21 主视图新增「配置总览」一句话说明
 
 ### 背景

@@ -27,6 +27,7 @@
                 <button class="btn success btn-toggle" id="btnToggle">▶ 启动</button>
                 <button class="icon-btn" id="btnTheme" title="主题：跟随系统">🌓</button>
                 <button class="icon-btn" id="btnSettings" title="打开配置（修改后 Ctrl+S 保存）">⚙</button>
+                <button class="icon-btn" id="btnAbout" title="关于">ℹ</button>
             </div>
             <div class="window-controls">
                 <button class="win-btn" id="btnMinimize" title="最小化">&#xE921;</button>
@@ -317,6 +318,29 @@
 </div>
 
 <div id="toastWrap"></div>
+
+<!-- 关于弹窗（点顶栏 ℹ 打开；✕ / 遮罩 / Esc 关闭） -->
+<div class="modal-overlay" id="aboutOverlay" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+    <div class="modal">
+        <div class="modal-head">
+            <span class="logo">🛡️</span>
+            <h2 id="aboutTitle">关于 StreamGuard</h2>
+            <button class="icon-btn modal-close" id="aboutClose" title="关闭">✕</button>
+        </div>
+        <div class="modal-body">
+            <p class="about-tagline">大模型 API 限流代理</p>
+            <dl class="about-meta">
+                <dt>组织</dt>
+                <dd>fhub</dd>
+                <dt>版本</dt>
+                <dd id="aboutVersion">-</dd>
+                <dt>许可</dt>
+                <dd>MIT License</dd>
+            </dl>
+            <p class="about-desc">运行于本机的轻量反向代理：对大模型 API 请求做限流、排队、熔断与重试保护，SSE 流式透传。运行时零第三方依赖。</p>
+        </div>
+    </div>
+</div>
 
 <script src="./src/main.ts" type="module"></script>
 </body>
