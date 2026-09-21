@@ -1,0 +1,63 @@
+# ===== 构建产物（规范：见 scripts/build.ps1）=====
+# 约定：所有可执行文件输出到仓库根目录，方便直接运行：
+#   .\streamguard.exe       (CLI)
+#   .\streamguard-gui.exe   (GUI)
+# 二进制一律不提交，通过 *.exe 统一忽略。
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+# 仅忽略仓库根目录的构建产物，避免误伤 cmd/streamguard/ 源码目录
+/streamguard
+/streamguard.exe
+/streamguard-gui.exe
+# 兼容旧布局（若曾使用 dist/ 输出）
+dist/
+# 注意：Wails 的 cmd/streamguard-gui/build/ 含图标与清单，需提交，
+# 因此只忽略其 bin 子目录（编译产物）。
+cmd/streamguard-gui/build/bin/
+cmd/streamguard-gui/frontend/dist/
+cmd/streamguard-gui/frontend/node_modules/
+# Wails 自动生成的构建指纹文件（构建产物类杂物）
+*.md5
+
+# ===== 测试与覆盖率 =====
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# ===== 本地敏感配置（禁止提交）=====
+# 真实的上游地址、API Key、模型名等敏感信息放在此文件中
+config.local.json
+*.local.json
+.env
+.env.*
+!.env.example
+
+# ===== 本地内部文档（禁止提交）=====
+# 含真实上游地址、内部模型清单等信息的文档
+docs/local/
+*.local.md
+
+# ===== 日志与运行时数据 =====
+*.log
+logs/
+tmp/
+temp/
+
+# ===== 编辑器与 IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ===== 依赖与缓存 =====
+vendor/
+
+# npm lock �ļ�������˽����ַ����ֹ�ύ
+cmd/streamguard-gui/frontend/package-lock.json

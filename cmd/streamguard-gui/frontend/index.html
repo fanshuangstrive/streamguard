@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>StreamGuard</title>
+    <link rel="stylesheet" href="./src/style.css"/>
+</head>
+<body>
+<div id="app">
+    <!-- 顶部标题栏（无边框窗口，可拖拽） -->
+    <header class="topbar" id="topbar">
+        <div class="brand">
+            <span class="logo">🛡️</span>
+            <div>
+                <h1>StreamGuard</h1>
+                <p class="subtitle">大模型 API 限流代理</p>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <div class="status-pill" id="statusPill">
+                <span class="dot" id="statusDot"></span>
+                <span id="statusText">未启动</span>
+            </div>
+            <div class="window-controls">
+                <button class="win-btn" id="btnMinimize" title="最小化">&#xE921;</button>
+                <button class="win-btn" id="btnMaximize" title="最大化/还原">&#xE922;</button>
+                <button class="win-btn close" id="btnClose" title="关闭">&#xE8BB;</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="layout">
+        <!-- 左侧：配置区 -->
+        <section class="panel config-panel">
+            <h2>配置</h2>
+
+            <!-- ===== 分组 1：基础连接 ===== -->
+            <div class="cfg-group">
+                <div class="cfg-group-head">
+                    <span class="cfg-group-title">① 基础连接</span>
+                    <span class="cfg-group-desc">必填：代理转发到哪个上游</span>
+                </div>
+                <div class="cfg-group-body">
+                    <div class="field">
+                        <label for="upstream">上游地址</label>
+                        <input id="upstream" type="text" placeholder="https://api.example.com"/>
+                        <small>请求路径原样转发：<code>/model/v1/chat/completions</code> → <code>上游/model/v1/chat/completions</code></small>
+                    </div>
+
+                    <div class="row">
+                        <div class="field">
+                            <label for="listen">监听地址</label>
+                            <input id="listen" type="text" placeholder="127.0.0.1:8080"/>
+                            <small>默认仅本机可访问，不暴露局域网</small>
+                        </div>
+                        <div class="field">
+                            <label for="timeout">请求超时</label>
+                            <input id="timeout" type="text" placeholder="120s"/>
+                            <small>SSE 长连接需较大值</small>
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label class="checkbox-label">
+                            <input id="preserveHost" type="checkbox"/>
+                            <span>保留原始 Host 头</span>
+                        </label>
+                        <small>部分上游网关（如 Kong）依赖 Host 做路由时开启；默认改写为上游主机名</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== 分组 2：限流 ===== -->
+            <div class="cfg-group">
+                <div class="cfg-group-head">
+                    <span class="cfg-group-title">② 限流</span>
+                    <span class="cfg-group-desc">控制「每秒放行几个」—— 像收费站发卡速率</span>
+                </div>
+                <div class="cfg-group-body">
+                    <div class="row">
+                        <div class="field">
+                            <label for="rate">限流速率（次/秒）</label>
+                            <input id="rate" type="number" min="0.1" step="0.1" value="1"/>
+                            <small>每秒最多放行多少请求</small>
+                        </div>
+                        <div class="field">
+                            <label for="burst">突发容量</label>
+                            <input id="burst" type="number" min="1" step="1" value="1"/>
+                            <small>允许瞬时通过的请求数</small>
+                        </div>
+                        <div class="field">
+                            <label for="maxWait">最大等待</label>
+                            <input id="maxWait" type="text" placeholder="30s"/>
+                            <small>排队超时后返回 429</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== 分组 3：大请求并发限制（主开关） ===== -->
+            <div class="cfg-group toggle-group" id="sizeLimitGroup">
+                <div class="cfg-group-head">
+                    <span class="cfg-group-title">③ 大请求并发限制</span>
+                    <label class="switch">
+                        <input id="sizeLimitEnabled" type="checkbox"/>
+                        <span class="slider"></span>
+                        <span class="switch-text">未启用</span>
+                    </label>
+                </div>
+                <p class="cfg-group-desc">控制「同时处理几个」—— 像停车场车位数。与②的区别：②管每秒放行多少，③管同一时刻最多几个在处理；可同时启用，请求需依次通过两道闸门。</p>
+                <div class="cfg-group-body">
+                    <div class="row">
+                        <div class="field">
+                            <label for="sizeLimitThreshold">大小分档阈值（token）</label>
+                            <input id="sizeLimitThreshold" type="number" min="1" step="1" value="10000"/>
+                            <small>≤ 阈值 = 小请求；&gt; 阈值 = 大请求</small>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="field">
+                            <label for="sizeLimitSmallConcurrent">小请求最大并发</label>
+                            <input id="sizeLimitSmallConcurrent" type="number" min="0" step="1" value="0"/>
+                            <small>0 = 不限制</small>
+                        </div>
+                        <div class="field">
+                            <label for="sizeLimitLargeConcurrent">大请求最大并发</label>
+                            <input id="sizeLimitLargeConcurrent" type="number" min="0" step="1" value="0"/>
+                            <small>0 = 不限制；两项不能同时为 0</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== 分组 4：熔断保护（主开关） ===== -->
+            <div class="cfg-group toggle-group" id="breakerGroup">
+                <div class="cfg-group-head">
+                    <span class="cfg-group-title">④ 熔断保护</span>
+                    <label class="switch">
+                        <input id="breakerEnabled" type="checkbox"/>
+                        <span class="slider"></span>
+                        <span class="switch-text">未启用</span>
+                    </label>
+                </div>
+                <p class="cfg-group-desc">上游连续失败达阈值后快速失败（503），冷却后自动半开探测，避免持续撞死上游</p>
+                <div class="cfg-group-body">
+                    <div class="row">
+                        <div class="field">
+                            <label for="breakerThreshold">熔断阈值（连续失败次数）</label>
+                            <input id="breakerThreshold" type="number" min="1" step="1" value="5"/>
+                            <small>达到该次数即熔断</small>
+                        </div>
+                        <div class="field">
+                            <label for="breakerCooldown">冷却时长</label>
+                            <input id="breakerCooldown" type="text" placeholder="30s"/>
+                            <small>熔断后等待该时长再试探恢复</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== 分组 5：上游限流重试（主开关） ===== -->
+            <div class="cfg-group toggle-group" id="retryGroup">
+                <div class="cfg-group-head">
+                    <span class="cfg-group-title">⑤ 上游限流重试</span>
+                    <label class="switch">
+                        <input id="retryEnabled" type="checkbox"/>
+                        <span class="slider"></span>
+                        <span class="switch-text">未启用</span>
+                    </label>
+                </div>
+                <p class="cfg-group-desc">上游返回 429/503 时自动等待并重试（优先尊重 Retry-After 响应头）</p>
+                <div class="cfg-group-body">
+                    <div class="row">
+                        <div class="field">
+                            <label for="retryMaxAttempts">最大尝试次数</label>
+                            <input id="retryMaxAttempts" type="number" min="1" step="1" value="3"/>
+                            <small>含首次请求</small>
+                        </div>
+                        <div class="field">
+                            <label for="retryInitialWait">首次重试等待</label>
+                            <input id="retryInitialWait" type="text" placeholder="1s"/>
+                            <small>指数退避：1s → 2s → 4s…</small>
+                        </div>
+                        <div class="field">
+                            <label for="retryMaxWait">单次等待上限</label>
+                            <input id="retryMaxWait" type="text" placeholder="10s"/>
+                            <small>退避与 Retry-After 均受此约束</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== 分组 6：日志（高级，默认折叠） ===== -->
+            <details class="cfg-group advanced">
+                <summary>高级选项：日志</summary>
+                <div class="cfg-group-body">
+                    <div class="row">
+                        <div class="field">
+                            <label for="logLevel">日志级别</label>
+                            <select id="logLevel">
+                                <option value="debug">debug</option>
+                                <option value="info" selected>info</option>
+                                <option value="warn">warn</option>
+                                <option value="error">error</option>
+                            </select>
+                            <small>日志输出详细程度</small>
+                        </div>
+                        <div class="field">
+                            <label for="logRetainDays">日志保留天数</label>
+                            <input id="logRetainDays" type="number" min="0" step="1" value="7"/>
+                            <small>启动时清理超过该天数的日志，0=不清理</small>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label for="logFileMode">详细日志落盘</label>
+                        <select id="logFileMode">
+                            <option value="console">不落盘（输出到控制台）</option>
+                            <option value="auto">自动：logs/streamguard-日期.log</option>
+                            <option value="custom">自定义路径…</option>
+                        </select>
+                        <input id="logFile" type="text" placeholder="例如：my.log（相对路径基于 logs/ 目录）" style="display:none; margin-top:8px;"/>
+                        <small>仅 debug 级别时记录请求/响应内容；相对路径会存到当前目录的 logs/ 下</small>
+                    </div>
+                </div>
+            </details>
+
+            <div class="actions">
+                <button class="btn primary" id="btnSave">保存配置</button>
+                <button class="btn ghost" id="btnReload">重新加载</button>
+            </div>
+        </section>
+
+        <!-- 右侧：状态 + 日志 -->
+        <section class="right-col">
+            <div class="panel stats-panel">
+                <h2>运行状态</h2>
+                <div class="cards">
+                    <div class="card">
+                        <span class="card-label">累计请求</span>
+                        <span class="card-value" id="statTotal">0</span>
+                    </div>
+                    <div class="card">
+                        <span class="card-label">等待次数</span>
+                        <span class="card-value" id="statWaited">0</span>
+                    </div>
+                    <div class="card">
+                        <span class="card-label">当前速率</span>
+                        <span class="card-value" id="statRate">-</span>
+                    </div>
+                </div>
+                <div class="addr-line">
+                    <span class="addr-label">代理地址</span>
+                    <code id="statAddr">未启动</code>
+                </div>
+            </div>
+
+            <div class="panel log-panel">
+                <div class="log-head">
+                    <h2>日志</h2>
+                    <button class="btn tiny ghost" id="btnClearLogs">清空</button>
+                </div>
+                <div class="log-list" id="logList">
+                    <div class="log-empty">暂无日志</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 底部操作栏 -->
+    <footer class="bottombar">
+        <div class="hint" id="configPath"></div>
+        <div class="hint" id="logPath"></div>
+        <div class="footer-actions">
+            <button class="btn success" id="btnStart">启动代理</button>
+            <button class="btn danger" id="btnStop" disabled>停止代理</button>
+        </div>
+    </footer>
+</div>
+
+<script src="./src/main.js" type="module"></script>
+</body>
+</html>

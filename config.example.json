@@ -1,0 +1,23 @@
+{
+  "listen": "127.0.0.1:8080",
+  "upstream": "https://api.example.com",
+  "preserve_host": false,
+  "rate": 1,
+  "burst": 1,
+  "max_wait": "30s",
+  "timeout": "120s",
+  "log_level": "info",
+  "log_file": "",
+  "log_retain_days": 7,
+  "breaker_enabled": false,
+  "breaker_threshold": 5,
+  "breaker_cooldown": "30s",
+  "retry_enabled": false,
+  "retry_max_attempts": 3,
+  "retry_initial_wait": "1s",
+  "retry_max_wait": "10s",
+  "size_limit_enabled": false,
+  "size_limit_threshold": 10000,
+  "size_limit_small_concurrent": 0,
+  "size_limit_large_concurrent": 0
+}

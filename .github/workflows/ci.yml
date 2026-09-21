@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test & Lint
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      # frontend/dist is gitignored but required by go:embed in cmd/streamguard-gui/main.go.
+      # Create a placeholder so vet/test can compile; real GUI assets are built locally via wails build.
+      - name: Create GUI frontend placeholder
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path cmd/streamguard-gui/frontend/dist | Out-Null
+          Set-Content -Path cmd/streamguard-gui/frontend/dist/index.html -Value '<!DOCTYPE html><html><body>placeholder</body></html>'
+
+      - name: gofmt check
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt needed on: $unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./... -count=1 -v
+
+  build:
+    name: Cross-compile CLI
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Build CLI for all platforms
+        run: |
+          GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" -o /dev/null ./cmd/streamguard
+          GOOS=darwin  GOARCH=amd64 go build -ldflags "-s -w" -o /dev/null ./cmd/streamguard
+          GOOS=darwin  GOARCH=arm64 go build -ldflags "-s -w" -o /dev/null ./cmd/streamguard
+          GOOS=linux   GOARCH=amd64 go build -ldflags "-s -w" -o /dev/null ./cmd/streamguard
+          GOOS=linux   GOARCH=arm64 go build -ldflags "-s -w" -o /dev/null ./cmd/streamguard
+
+      - name: Sensitive info scan
+        run: |
+          # 精确匹配真实敏感值。模式用字符类拆分书写（如 h[a]ier），
+          # 使敏感词本身不出现在仓库任何文件中；grep -E 匹配效果不变。
+          if git grep -n -i -E "h[a]ier\.net|model[a]pi-test|api[k]ey-695f|695f046[7]" -- cmd/ internal/ scripts/ README.md docs/ config.example.json; then
+            echo "Sensitive info found!"
+            exit 1
+          fi

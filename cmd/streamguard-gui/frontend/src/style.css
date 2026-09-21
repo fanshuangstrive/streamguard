@@ -1,0 +1,634 @@
+/* StreamGuard 桌面版样式 —— 深色主题，零外部依赖 */
+
+:root {
+    --bg: #12141a;
+    --panel: #1a1d26;
+    --panel-2: #21252f;
+    --border: #2c313d;
+    --text: #e6e9ef;
+    --text-dim: #8b93a5;
+    --accent: #4f8cff;
+    --success: #2ecc71;
+    --danger: #ff5c5c;
+    --warn: #ffb020;
+    --radius: 10px;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body {
+    height: 100%;
+    overflow: hidden;
+}
+
+body {
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* ---------- 顶部栏 ---------- */
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 22px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    /* 无边框窗口：标题栏可拖拽移动 */
+    --wails-draggable: drag;
+    user-select: none;
+}
+
+.topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+/* ---------- 窗口控制按钮 ---------- */
+.window-controls {
+    display: flex;
+    gap: 2px;
+    --wails-draggable: no-drag;
+}
+
+.win-btn {
+    width: 34px;
+    height: 30px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-dim);
+    font-family: "Segoe MDL2 Assets", "Segoe UI Symbol", sans-serif;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.win-btn:hover {
+    background: var(--panel-2);
+    color: var(--text);
+}
+
+.win-btn.close:hover {
+    background: var(--danger);
+    color: #fff;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.logo {
+    font-size: 26px;
+    line-height: 1;
+}
+
+.brand h1 {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+
+.subtitle {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 2px;
+}
+
+.status-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text-dim);
+}
+
+.status-pill.on {
+    color: var(--success);
+    border-color: rgba(46, 204, 113, 0.4);
+    background: rgba(46, 204, 113, 0.08);
+}
+
+.dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    transition: background 0.2s;
+}
+
+.status-pill.on .dot {
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+}
+
+/* ---------- 主布局 ---------- */
+.layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 16px;
+    padding: 16px 22px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* 窄屏（< 980px）改为单列堆叠，避免按钮被挤出可视区 */
+@media (max-width: 980px) {
+    .layout {
+        grid-template-columns: minmax(0, 1fr);
+        overflow-y: auto;
+    }
+
+    .config-panel {
+        overflow-y: visible;
+    }
+
+    .log-panel {
+        min-height: 260px;
+    }
+}
+
+.right-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 0;
+}
+
+.panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.panel h2 {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+}
+
+.config-panel {
+    overflow-y: auto;
+    /* 表单区可伸缩，底部操作按钮始终可见 */
+    min-height: 0;
+}
+
+/* ---------- 配置分组卡片 ---------- */
+.cfg-group {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 14px;
+}
+
+.cfg-group-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.cfg-group-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.cfg-group-desc {
+    font-size: 11.5px;
+    color: #6b7385;
+    line-height: 1.5;
+    margin-bottom: 10px;
+}
+
+.cfg-group-head .cfg-group-desc {
+    margin-bottom: 0;
+}
+
+/* 主开关关闭时，子参数区整体禁用并降透明度 */
+.toggle-group .cfg-group-body {
+    transition: opacity 0.2s;
+}
+
+.toggle-group.off .cfg-group-body {
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+.toggle-group.off .cfg-group-body input {
+    pointer-events: none;
+}
+
+/* 开关（switch）样式 */
+.switch {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    flex-shrink: 0;
+    --wails-draggable: no-drag;
+}
+
+.switch input {
+    display: none;
+}
+
+.switch .slider {
+    width: 36px;
+    height: 20px;
+    border-radius: 999px;
+    background: #3a4150;
+    position: relative;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+
+.switch .slider::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #aab2c2;
+    transition: transform 0.2s, background 0.2s;
+}
+
+.switch input:checked + .slider {
+    background: var(--accent);
+}
+
+.switch input:checked + .slider::after {
+    transform: translateX(16px);
+    background: #fff;
+}
+
+.switch-text {
+    font-size: 12px;
+    color: var(--text-dim);
+    min-width: 34px;
+}
+
+.switch input:checked ~ .switch-text {
+    color: var(--accent);
+}
+
+/* 高级选项折叠块 */
+details.cfg-group.advanced summary {
+    cursor: pointer;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    user-select: none;
+    list-style: none;
+}
+
+details.cfg-group.advanced summary::before {
+    content: "▸ ";
+}
+
+details.cfg-group.advanced[open] summary::before {
+    content: "▾ ";
+}
+
+details.cfg-group.advanced .cfg-group-body {
+    margin-top: 12px;
+}
+
+/* ---------- 表单 ---------- */
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 14px;
+    flex: 1;
+    min-width: 0;
+}
+
+.field label {
+    font-size: 12.5px;
+    color: var(--text-dim);
+    font-weight: 500;
+}
+
+.field small {
+    font-size: 11.5px;
+    color: #6b7385;
+    line-height: 1.4;
+}
+
+.field small code {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 11px;
+    color: #9aa3b5;
+    word-break: break-all;
+}
+
+/* 复选框字段：标签与输入框同行显示 */
+.field label.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: var(--text);
+    font-size: 13px;
+}
+
+.field label.checkbox-label input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+input, select {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 9px 11px;
+    color: var(--text);
+    font-size: 13.5px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    width: 100%;
+}
+
+input:focus, select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.15);
+}
+
+input::placeholder {
+    color: #565e70;
+}
+
+.row {
+    display: flex;
+    gap: 12px;
+}
+
+/* ---------- 按钮 ---------- */
+.btn {
+    border: 1px solid transparent;
+    border-radius: 7px;
+    padding: 9px 18px;
+    font-size: 13.5px;
+    font-family: inherit;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.btn.primary {
+    background: var(--accent);
+    color: #fff;
+}
+
+.btn.primary:hover:not(:disabled) {
+    background: #3d7bf0;
+}
+
+.btn.success {
+    background: var(--success);
+    color: #06210f;
+    font-weight: 600;
+}
+
+.btn.success:hover:not(:disabled) {
+    background: #27b863;
+}
+
+.btn.danger {
+    background: transparent;
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.btn.danger:hover:not(:disabled) {
+    background: rgba(255, 92, 92, 0.12);
+}
+
+.btn.ghost {
+    background: transparent;
+    border-color: var(--border);
+    color: var(--text-dim);
+}
+
+.btn.ghost:hover:not(:disabled) {
+    border-color: var(--text-dim);
+    color: var(--text);
+}
+
+.btn.tiny {
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+.actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 4px;
+    /* 固定在配置面板底部，滚动表单时不被遮挡 */
+    position: sticky;
+    bottom: 0;
+    padding-top: 12px;
+    padding-bottom: 2px;
+    background: linear-gradient(to bottom, transparent, var(--panel) 30%);
+}
+
+/* ---------- 统计卡片 ---------- */
+.stats-panel {
+    flex-shrink: 0;
+}
+
+.cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.card {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.card-label {
+    font-size: 11.5px;
+    color: var(--text-dim);
+}
+
+.card-value {
+    font-size: 22px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+}
+
+.addr-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.addr-label {
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.addr-line code {
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 12.5px;
+    color: var(--success);
+    background: var(--panel-2);
+    padding: 3px 9px;
+    border-radius: 5px;
+}
+
+/* ---------- 日志 ---------- */
+.log-panel {
+    flex: 1;
+    min-height: 0;
+}
+
+.log-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.log-head h2 {
+    margin-bottom: 0;
+}
+
+.log-list {
+    flex: 1;
+    overflow-y: auto;
+    background: #0d0f14;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.7;
+}
+
+.log-empty {
+    color: #4a5162;
+    font-style: italic;
+}
+
+.log-line {
+    display: flex;
+    gap: 10px;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.log-time {
+    color: #565e70;
+    flex-shrink: 0;
+}
+
+.log-line.info .log-msg { color: #9fb4d8; }
+.log-line.warn .log-msg { color: var(--warn); }
+.log-line.error .log-msg { color: var(--danger); }
+
+/* ---------- 底部栏 ---------- */
+.bottombar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 22px;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.hint {
+    font-size: 11.5px;
+    color: #565e70;
+    font-family: "Cascadia Code", Consolas, monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 38%;
+    cursor: default;
+}
+
+.footer-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* ---------- 滚动条 ---------- */
+::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #333a48;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #414a5c;
+}
