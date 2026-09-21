@@ -13,6 +13,8 @@ import (
 // **不含请求/响应头与 body**，符合「详细日志不进面板」的敏感信息红线。
 // Model/BodyBytes 是 chat 请求的元信息（模型名与请求体字节数），
 // 同样不含消息内容，非 chat 路径不提取、保持零值。
+// RespBytes 是写回客户端的响应体字节数（代理透传的上游响应大小，
+// SSE 场景为全部数据块之和），对所有经代理的请求均统计。
 type RequestEvent struct {
 	Method    string        // 请求方法
 	Path      string        // 请求路径（原样，不含 query）
@@ -22,6 +24,7 @@ type RequestEvent struct {
 	WaitTime  time.Duration // 限流等待累计时长
 	Model     string        // chat 请求的模型名（非 chat 或提取失败时为空）
 	BodyBytes int           // chat 请求体字节数（非 chat 路径为 0）
+	RespBytes int64         // 写回客户端的响应体字节数（输入大小由 BodyBytes 表示）
 }
 
 // requestWaitMarkThreshold 是判定「本请求发生过排队」的最小等待时长。
@@ -42,8 +45,9 @@ type onRequestFunc func(RequestEvent)
 // 否则流式响应会被缓冲或降级。
 type statusRecorder struct {
 	http.ResponseWriter
-	status      int
-	wroteHeader bool
+	status       int
+	wroteHeader  bool
+	bytesWritten int64 // 累计写回客户端的响应体字节数（含 SSE 各块之和）
 }
 
 // newStatusRecorder 创建状态记录器，默认状态码 200（未显式 WriteHeader 时隐式为 200）。
@@ -61,13 +65,15 @@ func (s *statusRecorder) WriteHeader(status int) {
 	s.ResponseWriter.WriteHeader(status)
 }
 
-// Write 在未显式写头时隐式记为 200，随后透传。
+// Write 在未显式写头时隐式记为 200，累加写出字节数后透传。
 func (s *statusRecorder) Write(b []byte) (int, error) {
 	if !s.wroteHeader {
 		s.wroteHeader = true
 		// status 保持默认 200
 	}
-	return s.ResponseWriter.Write(b)
+	n, err := s.ResponseWriter.Write(b)
+	s.bytesWritten += int64(n)
+	return n, err
 }
 
 // Flush 透传底层 Flusher，保证 SSE 实时性不被破坏。

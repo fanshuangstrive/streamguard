@@ -27,12 +27,13 @@ func TestApp_RequestLogHook_Forwards(t *testing.T) {
 		status    int
 		model     string
 		bodyBytes int
+		respBytes int64
 		called    bool
 	}
-	a.SetRequestLogHook(func(method, path string, status int, _ time.Duration, _ bool, model string, bodyBytes int) {
+	a.SetRequestLogHook(func(method, path string, status int, _ time.Duration, _ bool, model string, bodyBytes int, respBytes int64) {
 		mu.Lock()
 		got.method, got.path, got.status, got.called = method, path, status, true
-		got.model, got.bodyBytes = model, bodyBytes
+		got.model, got.bodyBytes, got.respBytes = model, bodyBytes, respBytes
 		mu.Unlock()
 	})
 
@@ -76,6 +77,10 @@ func TestApp_RequestLogHook_Forwards(t *testing.T) {
 	}
 	if got.bodyBytes != len(body) {
 		t.Fatalf("应上报请求体大小 %d，实际 %d", len(body), got.bodyBytes)
+	}
+	// 上游响应体 {"ok":true} 共 10 字节，经代理透传后应上报为响应（输出）大小。
+	if got.respBytes != int64(len(`{"ok":true}`)) {
+		t.Fatalf("应上报响应体大小 %d，实际 %d", len(`{"ok":true}`), got.respBytes)
 	}
 }
 

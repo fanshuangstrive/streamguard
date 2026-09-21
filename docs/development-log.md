@@ -2,6 +2,30 @@
 
 记录 StreamGuard 的开发过程、决策与经验。
 
+## 2026-09-21 逐请求日志新增响应体（输出）大小，区分输入/输出
+
+### 背景
+
+面板逐请求行原先只展示请求体（输入）大小（且仅 chat 路径有）。用户希望同时看到**上游响应内容的大小**，并在日志里**标注清楚是输入还是输出**。
+
+### 决策
+
+- **输出大小对所有请求统计**：复用已有的 `statusRecorder`（本就包裹 ResponseWriter 记录状态码），在其 `Write` 里累加 `bytesWritten`。`ReverseProxy` 通过 `io.Copy` 把上游响应写回该 writer，故计数即客户端收到的响应体字节数；**SSE 场景天然为各数据块之和**。不新增依赖、不改转发链路。
+- **输入大小仍仅 chat**：请求体只在 chat/并发限流时 `peekBody` 预读，沿用现状，不强推全路径（避免对所有请求缓冲 body）。
+- **标注区分输入/输出**：GUI `addRequestLog` 将裸大小改为 `请求 X`/`响应 Y` 文案；`formatBytes` 参数由 `int` 放宽为 `int64` 以兼容 `RespBytes`。仅大小元信息，仍守第 9 节「详细日志不进面板」红线（不含响应正文）。
+- **不新增配置项**：仅扩展 `RequestEvent.RespBytes` + `RequestLogFunc` 签名，免九处同步。
+
+### 改动
+
+1. **server/requestlog.go**：`statusRecorder` 加 `bytesWritten int64`，`Write` 累加；`RequestEvent` 加 `RespBytes int64`。
+2. **server/server.go**：`handleProxy` defer 上报 `RespBytes: stat.bytesWritten`。
+3. **app/app.go**：`RequestLogFunc` 签名追加 `respBytes int64`；`newRequestForwarder` 透传。
+4. **GUI app.go**：钩子 lambda + `addRequestLog` 加 `respBytes`，展示 `请求 X · 响应 Y`；`formatBytes(int64)`。
+
+### 验证
+
+- server：`statusRecorder` 字节累计断言 + chat `RespBytes==len(上游body)` + 新增 `TestServer_OnRequestHook_ResponseBytesNonChat`（非 chat 也统计输出）；app 钩子测断言 `respBytes==len({"ok":true})`。`go test ./... -count=1`、`go vet`、`gofmt` 全过。
+
 ## 2026-09-21 主视图顶栏新增「关于」弹窗 + GUI 交付两个踩坑
 
 ### 背景

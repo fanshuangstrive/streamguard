@@ -30,6 +30,9 @@ func TestStatusRecorder_CapturesStatus(t *testing.T) {
 	if rec.Body.String() != "hi" {
 		t.Fatalf("响应体未透传：%q", rec.Body.String())
 	}
+	if sr.bytesWritten != 2 {
+		t.Fatalf("应累计写出 2 字节，实际 %d", sr.bytesWritten)
+	}
 	// Flush 不应 panic（底层 httptest.ResponseRecorder 支持 Flusher）。
 	sr.Flush()
 }
@@ -120,6 +123,50 @@ func TestServer_OnRequestHook_ChatModelAndSize(t *testing.T) {
 	}
 	if got[0].BodyBytes != len(body) {
 		t.Fatalf("请求体大小应为 %d，实际 %d", len(body), got[0].BodyBytes)
+	}
+	// 上游固定响应体应作为响应（输出）大小上报。
+	const respBody = `{"id":"chatcmpl-test","choices":[]}`
+	if got[0].RespBytes != int64(len(respBody)) {
+		t.Fatalf("响应体大小应为 %d，实际 %d", len(respBody), got[0].RespBytes)
+	}
+}
+
+// TestServer_OnRequestHook_ResponseBytesNonChat 验证非 chat 路径虽不提取请求体大小，
+// 但仍统计写回客户端的响应体字节数（输出大小对所有请求生效）。
+func TestServer_OnRequestHook_ResponseBytesNonChat(t *testing.T) {
+	upstream := newTestUpstream(t, nil)
+	defer upstream.Close()
+
+	p, err := proxy.New(proxy.Options{Upstream: upstream.URL, Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatalf("创建代理失败：%v", err)
+	}
+
+	var mu sync.Mutex
+	var got []RequestEvent
+	srv := New(Options{
+		Proxy: p,
+		OnRequest: func(e RequestEvent) {
+			mu.Lock()
+			got = append(got, e)
+			mu.Unlock()
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/embeddings", strings.NewReader(`{"model":"emb-1","input":"x"}`))
+	srv.ServeHTTP(httptest.NewRecorder(), req)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 1 {
+		t.Fatalf("钩子应被调用 1 次，实际 %d", len(got))
+	}
+	if got[0].BodyBytes != 0 {
+		t.Fatalf("非 chat 不应上报请求体大小，实际 %d", got[0].BodyBytes)
+	}
+	const respBody = `{"id":"chatcmpl-test","choices":[]}`
+	if got[0].RespBytes != int64(len(respBody)) {
+		t.Fatalf("非 chat 也应上报响应体大小 %d，实际 %d", len(respBody), got[0].RespBytes)
 	}
 }
 

@@ -134,6 +134,7 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 			WaitTime:  waitDur,
 			Model:     model,
 			BodyBytes: bodyBytes,
+			RespBytes: stat.bytesWritten,
 		})
 	}()
 

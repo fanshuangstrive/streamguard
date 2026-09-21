@@ -103,8 +103,8 @@ func (a *App) startup(ctx context.Context) {
 	core := a.core
 	a.mu.Unlock()
 
-	core.SetRequestLogHook(func(method, path string, status int, elapsed time.Duration, waited bool, model string, bodyBytes int) {
-		a.addRequestLog(method, path, status, elapsed, waited, model, bodyBytes)
+	core.SetRequestLogHook(func(method, path string, status int, elapsed time.Duration, waited bool, model string, bodyBytes int, respBytes int64) {
+		a.addRequestLog(method, path, status, elapsed, waited, model, bodyBytes, respBytes)
 	})
 
 	a.addLog("info", fmt.Sprintf("config file: %s", a.cfgPath))
@@ -202,9 +202,9 @@ func (a *App) addLogEntry(level, source, msg string) {
 //
 // 级别按状态码归类：>=500 为 error，429 或 >=400 为 warn，其余为 info。
 // 排队/限流标记：命中速率或并发等待（waited）时追加「排队」提示。
-// chat 请求额外展示模型名与请求体大小（均为元信息，不含消息内容）。
-// 仅含方法/路径/状态码/耗时/chat 元信息，不含请求体与响应体（符合开发规范第 9 节）。
-func (a *App) addRequestLog(method, path string, status int, elapsed time.Duration, waited bool, model string, bodyBytes int) {
+// chat 请求额外展示模型名与请求体（输入）大小；所有请求展示响应体（输出）大小。
+// 均为大小/模型等元信息，不含请求体与响应体内容（符合开发规范第 9 节）。
+func (a *App) addRequestLog(method, path string, status int, elapsed time.Duration, waited bool, model string, bodyBytes int, respBytes int64) {
 	level := "info"
 	switch {
 	case status >= 500:
@@ -217,8 +217,12 @@ func (a *App) addRequestLog(method, path string, status int, elapsed time.Durati
 	if model != "" {
 		msg += fmt.Sprintf(" · %s", model)
 	}
+	// 请求体=输入（仅 chat 预读到），响应体=输出（代理透传大小）；标注区分输入/输出。
 	if bodyBytes > 0 {
-		msg += fmt.Sprintf(" · %s", formatBytes(bodyBytes))
+		msg += fmt.Sprintf(" · 请求 %s", formatBytes(int64(bodyBytes)))
+	}
+	if respBytes > 0 {
+		msg += fmt.Sprintf(" · 响应 %s", formatBytes(respBytes))
 	}
 	if waited {
 		msg += " · 排队"
@@ -227,7 +231,7 @@ func (a *App) addRequestLog(method, path string, status int, elapsed time.Durati
 }
 
 // formatBytes 把字节数格式化为易读单位（纯 ASCII，避免面板宽度抖动）。
-func formatBytes(n int) string {
+func formatBytes(n int64) string {
 	switch {
 	case n >= 1<<20:
 		return fmt.Sprintf("%.1fMB", float64(n)/(1<<20))
