@@ -77,6 +77,7 @@ const el = {
     statRate: $("statRate"),
     statAddr: $("statAddr"),
     statBreaker: $("statBreaker"),
+    configSummary: $("configSummary"),
     sparkTotal: $("sparkTotal") as unknown as SVGSVGElement,
     emptyGuide: $("emptyGuide"),
     logFilter: $("logFilter") as HTMLSelectElement,
@@ -174,11 +175,59 @@ async function loadConfig(): Promise<void> {
     try {
         const cfg = await GetConfig();
         fillConfig(cfg as unknown as Record<string, unknown>);
+        renderConfigSummary(cfg as unknown as Record<string, unknown>);
         lastSavedConfig = JSON.stringify(collectConfig());
         updateDirty();
     } catch (err) {
         console.error("加载配置失败", err);
     }
+}
+
+// ---------- 配置总览（主视图一句话说明当前生效配置） ----------
+
+// 取字符串配置项，空/缺失时回退默认值。
+function cfgStr(v: unknown, fallback: string): string {
+    return typeof v === "string" && v ? v : fallback;
+}
+
+// 取数值配置项，非法时回退默认值。
+function cfgNum(v: unknown, fallback: number): number {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+// 把当前生效配置组装成一句可读的整体说明。
+// 反映的是已保存/生效的配置（非表单草稿），保存后 loadConfig 会刷新它。
+function buildConfigSummary(cfg: Record<string, unknown>): string {
+    const listen = cfgStr(cfg.listen, "127.0.0.1:8080");
+    const upstream = cfgStr(cfg.upstream, "未配置上游");
+    const rate = cfgNum(cfg.rate, 1);
+    const burst = cfgNum(cfg.burst, 1);
+    const maxWait = cfgStr(cfg.max_wait, "30s");
+    const timeout = cfgStr(cfg.timeout, "120s");
+
+    const on: string[] = [];
+    const off: string[] = [];
+    if (cfg.breaker_enabled) on.push(`熔断保护（连败 ${cfgNum(cfg.breaker_threshold, 5)} 次触发，冷却 ${cfgStr(cfg.breaker_cooldown, "30s")}）`);
+    else off.push("熔断保护");
+    if (cfg.retry_enabled) on.push(`上游重试（最多 ${cfgNum(cfg.retry_max_attempts, 3)} 次）`);
+    else off.push("上游重试");
+    if (cfg.size_limit_enabled) on.push(`大请求并发限制（阈值 ${cfgNum(cfg.size_limit_threshold, 10000)} token，小/大并发 ${cfgNum(cfg.size_limit_small_concurrent, 0)}/${cfgNum(cfg.size_limit_large_concurrent, 0)}）`);
+    else off.push("大请求并发限制");
+
+    let guard: string;
+    if (on.length === 0) {
+        guard = `${off.join("、")}均未启用`;
+    } else {
+        guard = on.join("、") + (off.length ? `；${off.join("、")}未启用` : "");
+    }
+
+    return `本机 ${listen} → ${upstream}；限流 ${rate} 次/秒（突发 ${burst}，排队超 ${maxWait} 返回 429），请求超时 ${timeout}；${guard}。`;
+}
+
+// 渲染配置总览到主视图。用 textContent，避免上游地址等文本破坏 DOM。
+function renderConfigSummary(cfg: Record<string, unknown>): void {
+    el.configSummary.textContent = buildConfigSummary(cfg);
 }
 
 // ---------- Dirty 跟踪 ----------

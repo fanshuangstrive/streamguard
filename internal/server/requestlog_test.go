@@ -85,6 +85,115 @@ func TestServer_OnRequestHook_BasicInfo(t *testing.T) {
 	}
 }
 
+// TestServer_OnRequestHook_ChatModelAndSize 验证 chat 请求上报模型名与请求体大小。
+func TestServer_OnRequestHook_ChatModelAndSize(t *testing.T) {
+	upstream := newTestUpstream(t, nil)
+	defer upstream.Close()
+
+	p, err := proxy.New(proxy.Options{Upstream: upstream.URL, Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatalf("创建代理失败：%v", err)
+	}
+
+	var mu sync.Mutex
+	var got []RequestEvent
+	srv := New(Options{
+		Proxy: p,
+		OnRequest: func(e RequestEvent) {
+			mu.Lock()
+			got = append(got, e)
+			mu.Unlock()
+		},
+	})
+
+	body := `{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hi"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+	srv.ServeHTTP(httptest.NewRecorder(), req)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 1 {
+		t.Fatalf("钩子应被调用 1 次，实际 %d", len(got))
+	}
+	if got[0].Model != "gpt-4o-mini" {
+		t.Fatalf("应提取到模型名 gpt-4o-mini，实际 %q", got[0].Model)
+	}
+	if got[0].BodyBytes != len(body) {
+		t.Fatalf("请求体大小应为 %d，实际 %d", len(body), got[0].BodyBytes)
+	}
+}
+
+// TestServer_OnRequestHook_NonChatNoBodyRead 验证非 chat 路径不提取模型、不上报 body 大小。
+func TestServer_OnRequestHook_NonChatNoBodyRead(t *testing.T) {
+	upstream := newTestUpstream(t, nil)
+	defer upstream.Close()
+
+	p, err := proxy.New(proxy.Options{Upstream: upstream.URL, Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatalf("创建代理失败：%v", err)
+	}
+
+	var mu sync.Mutex
+	var got []RequestEvent
+	srv := New(Options{
+		Proxy: p,
+		OnRequest: func(e RequestEvent) {
+			mu.Lock()
+			got = append(got, e)
+			mu.Unlock()
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/embeddings", strings.NewReader(`{"model":"emb-1","input":"x"}`))
+	srv.ServeHTTP(httptest.NewRecorder(), req)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 1 {
+		t.Fatalf("钩子应被调用 1 次，实际 %d", len(got))
+	}
+	if got[0].Model != "" || got[0].BodyBytes != 0 {
+		t.Fatalf("非 chat 路径不应提取模型/大小，实际 model=%q bytes=%d", got[0].Model, got[0].BodyBytes)
+	}
+}
+
+// TestServer_OnRequestHook_ChatInvalidJSON 验证 chat 请求体非 JSON 时不报错、模型为空。
+func TestServer_OnRequestHook_ChatInvalidJSON(t *testing.T) {
+	upstream := newTestUpstream(t, nil)
+	defer upstream.Close()
+
+	p, err := proxy.New(proxy.Options{Upstream: upstream.URL, Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatalf("创建代理失败：%v", err)
+	}
+
+	var mu sync.Mutex
+	var got []RequestEvent
+	srv := New(Options{
+		Proxy: p,
+		OnRequest: func(e RequestEvent) {
+			mu.Lock()
+			got = append(got, e)
+			mu.Unlock()
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader("not-json"))
+	srv.ServeHTTP(httptest.NewRecorder(), req)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 1 {
+		t.Fatalf("钩子应被调用 1 次，实际 %d", len(got))
+	}
+	if got[0].Model != "" {
+		t.Fatalf("非 JSON 请求体模型应为空，实际 %q", got[0].Model)
+	}
+	if got[0].BodyBytes != len("not-json") {
+		t.Fatalf("请求体大小应为 %d，实际 %d", len("not-json"), got[0].BodyBytes)
+	}
+}
+
 // TestServer_OnRequestHook_RateLimit429 验证限流拒绝时上报最终状态码 429。
 func TestServer_OnRequestHook_RateLimit429(t *testing.T) {
 	upstream := newTestUpstream(t, nil)

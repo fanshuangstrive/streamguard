@@ -22,14 +22,17 @@ func TestApp_RequestLogHook_Forwards(t *testing.T) {
 
 	var mu sync.Mutex
 	var got struct {
-		method string
-		path   string
-		status int
-		called bool
+		method    string
+		path      string
+		status    int
+		model     string
+		bodyBytes int
+		called    bool
 	}
-	a.SetRequestLogHook(func(method, path string, status int, _ time.Duration, _ bool) {
+	a.SetRequestLogHook(func(method, path string, status int, _ time.Duration, _ bool, model string, bodyBytes int) {
 		mu.Lock()
 		got.method, got.path, got.status, got.called = method, path, status, true
+		got.model, got.bodyBytes = model, bodyBytes
 		mu.Unlock()
 	})
 
@@ -38,7 +41,8 @@ func TestApp_RequestLogHook_Forwards(t *testing.T) {
 	}
 	defer a.Stop(context.Background())
 
-	resp, err := http.Post("http://"+a.Addr()+"/v1/chat/completions", "application/json", strings.NewReader(`{}`))
+	body := `{"model":"test-model","messages":[{"role":"user","content":"hi"}]}`
+	resp, err := http.Post("http://"+a.Addr()+"/v1/chat/completions", "application/json", strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("请求代理失败：%v", err)
 	}
@@ -66,6 +70,12 @@ func TestApp_RequestLogHook_Forwards(t *testing.T) {
 	}
 	if got.status != http.StatusOK {
 		t.Fatalf("状态码应为 200，实际 %d", got.status)
+	}
+	if got.model != "test-model" {
+		t.Fatalf("应上报模型名 test-model，实际 %q", got.model)
+	}
+	if got.bodyBytes != len(body) {
+		t.Fatalf("应上报请求体大小 %d，实际 %d", len(body), got.bodyBytes)
 	}
 }
 

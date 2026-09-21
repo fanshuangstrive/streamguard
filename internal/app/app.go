@@ -93,12 +93,15 @@ func (a *App) SetVerboseLogger(logger *log.Logger) {
 //
 // 参数均为基本类型，使调用方（GUI）无需 import server 包。
 // elapsed 为请求总耗时，waited 表示是否因限流发生过排队。
-type RequestLogFunc func(method, path string, status int, elapsed time.Duration, waited bool)
+// model/bodyBytes 是 chat 请求的元信息（模型名与请求体字节数），
+// 非 chat 路径为空/0；不含消息内容，符合面板安全红线。
+type RequestLogFunc func(method, path string, status int, elapsed time.Duration, waited bool, model string, bodyBytes int)
 
 // SetRequestLogHook 注册逐请求基础信息回调，用于界面日志面板展示 API 基础信息。
 //
 // 传入 nil 取消注册。必须在 Start 之前调用；重启（UpdateConfig）时会沿用该回调。
-// 注意：回调仅含方法/路径/状态码/耗时，不含请求/响应内容，符合「详细日志不进面板」红线。
+// 注意：回调仅含方法/路径/状态码/耗时/chat 元信息，不含请求/响应内容，
+// 符合「详细日志不进面板」红线。
 func (a *App) SetRequestLogHook(fn RequestLogFunc) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -114,7 +117,7 @@ func newRequestForwarder(hook RequestLogFunc) func(server.RequestEvent) {
 		return nil
 	}
 	return func(e server.RequestEvent) {
-		hook(e.Method, e.Path, e.Status, e.Elapsed, e.Waited)
+		hook(e.Method, e.Path, e.Status, e.Elapsed, e.Waited, e.Model, e.BodyBytes)
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/streamguard/streamguard/internal/limiter"
@@ -116,17 +117,23 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 	// 累计限流等待时长（速率限流 + 并发限流），用于面板「排队」标记。
 	var waitDur time.Duration
 
+	// chat 请求元信息（模型名/请求体字节数），在下方预读请求体时填充，供 defer 上报。
+	var model string
+	var bodyBytes int
+
 	defer func() {
 		if s.onRequest == nil {
 			return
 		}
 		s.onRequest(RequestEvent{
-			Method:   r.Method,
-			Path:     r.URL.Path,
-			Status:   stat.status,
-			Elapsed:  time.Since(start),
-			Waited:   waitDur >= requestWaitMarkThreshold,
-			WaitTime: waitDur,
+			Method:    r.Method,
+			Path:      r.URL.Path,
+			Status:    stat.status,
+			Elapsed:   time.Since(start),
+			Waited:    waitDur >= requestWaitMarkThreshold,
+			WaitTime:  waitDur,
+			Model:     model,
+			BodyBytes: bodyBytes,
 		})
 	}()
 
@@ -143,6 +150,19 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 	}
 
+	// 预读请求体：并发限流需要 token 估算，chat 路径需要提取模型名/大小上报面板。
+	// 两者共用一次读取（peekBody 会回填 r.Body，不重复缓冲）。
+	// 非 chat 且未启用并发限流时不读 body，保持流式转发零额外缓冲。
+	var peeked []byte
+	isChat := r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/chat/completions")
+	if s.concurrency != nil || (isChat && s.onRequest != nil) {
+		peeked = s.peekBody(r)
+	}
+	if isChat && len(peeked) > 0 {
+		model = extractModelName(peeked)
+		bodyBytes = len(peeked)
+	}
+
 	// 1. 速率限流等待
 	if s.waiter != nil {
 		t0 := time.Now()
@@ -156,7 +176,7 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	// 2. 按请求大小分档的并发限流
 	if s.concurrency != nil {
-		tokens := limiter.EstimateTokens(s.peekBody(r))
+		tokens := limiter.EstimateTokens(peeked)
 		t0 := time.Now()
 		release, err := s.concurrency.Acquire(ctx, tokens)
 		waitDur += time.Since(t0)
@@ -198,6 +218,20 @@ func (s *Server) peekBody(r *http.Request) []byte {
 	}
 	r.Body = io.NopCloser(bytes.NewReader(body))
 	return body
+}
+
+// extractModelName 从 chat/completions 请求体中提取模型名。
+//
+// 只取 model 字段（元信息），不解析也不保留消息内容。
+// 解析失败或字段缺失时返回空串。
+func extractModelName(body []byte) string {
+	var req struct {
+		Model string `json:"model"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		return ""
+	}
+	return req.Model
 }
 
 // logRequest 打印请求行、请求头与请求体（详细模式）。

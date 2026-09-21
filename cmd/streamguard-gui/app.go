@@ -103,8 +103,8 @@ func (a *App) startup(ctx context.Context) {
 	core := a.core
 	a.mu.Unlock()
 
-	core.SetRequestLogHook(func(method, path string, status int, elapsed time.Duration, waited bool) {
-		a.addRequestLog(method, path, status, elapsed, waited)
+	core.SetRequestLogHook(func(method, path string, status int, elapsed time.Duration, waited bool, model string, bodyBytes int) {
+		a.addRequestLog(method, path, status, elapsed, waited, model, bodyBytes)
 	})
 
 	a.addLog("info", fmt.Sprintf("config file: %s", a.cfgPath))
@@ -202,8 +202,9 @@ func (a *App) addLogEntry(level, source, msg string) {
 //
 // 级别按状态码归类：>=500 为 error，429 或 >=400 为 warn，其余为 info。
 // 排队/限流标记：命中速率或并发等待（waited）时追加「排队」提示。
-// 仅含方法/路径/状态码/耗时，不含请求体与响应体（符合开发规范第 9 节）。
-func (a *App) addRequestLog(method, path string, status int, elapsed time.Duration, waited bool) {
+// chat 请求额外展示模型名与请求体大小（均为元信息，不含消息内容）。
+// 仅含方法/路径/状态码/耗时/chat 元信息，不含请求体与响应体（符合开发规范第 9 节）。
+func (a *App) addRequestLog(method, path string, status int, elapsed time.Duration, waited bool, model string, bodyBytes int) {
 	level := "info"
 	switch {
 	case status >= 500:
@@ -213,10 +214,28 @@ func (a *App) addRequestLog(method, path string, status int, elapsed time.Durati
 	}
 
 	msg := fmt.Sprintf("%s %s → %d · %s", method, path, status, elapsed.Round(time.Millisecond))
+	if model != "" {
+		msg += fmt.Sprintf(" · %s", model)
+	}
+	if bodyBytes > 0 {
+		msg += fmt.Sprintf(" · %s", formatBytes(bodyBytes))
+	}
 	if waited {
 		msg += " · 排队"
 	}
 	a.addLogEntry(level, "request", msg)
+}
+
+// formatBytes 把字节数格式化为易读单位（纯 ASCII，避免面板宽度抖动）。
+func formatBytes(n int) string {
+	switch {
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1fMB", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%.1fKB", float64(n)/(1<<10))
+	default:
+		return fmt.Sprintf("%dB", n)
+	}
 }
 
 // ---------- 以下方法暴露给前端 ----------

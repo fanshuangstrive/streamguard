@@ -2,6 +2,55 @@
 
 记录 StreamGuard 的开发过程、决策与经验。
 
+## 2026-09-21 主视图新增「配置总览」一句话说明
+
+### 背景
+
+主视图只有一行「将客户端指向代理地址即可开始」，新用户看不到当前配置整体在做什么，需进 ⚙ 逐项看。
+用户建议补一句对整体配置的说明。
+
+### 决策
+
+- **纯前端、零后端改动**：主视图已有 `GetConfig`（返回生效配置），在 `loadConfig` 里组装一句人读文本即可，**不新增配置项、不改 Wails 绑定**。
+- **反映生效配置而非表单草稿**：数据源取 `GetConfig()`（core 当前配置），保存后 `loadConfig` 刷新；避免把未保存的 dirty 表单误当成运行中配置。
+- **textContent 渲染**：上游地址等为用户输入，用 textContent 而非 innerHTML，避免破坏 DOM。
+- **自适应文案**：熔断/重试/大请求并发均关时合并为“…均未启用”；启用则带关键参数（阈值/次数/并发）。
+
+### 改动
+
+1. **index.html**：`addr-line` 下方新增 `#configSummary` 行（带 hover 提示）。
+2. **main.ts**：新增 `buildConfigSummary`/`renderConfigSummary` + `cfgStr`/`cfgNum` 安全取值助手；`loadConfig` 内调用。
+3. **style.css**：`.config-summary` 样式（次级色、小字号、自动换行）。
+
+### 验证
+
+- `verify.ps1 -FrontendOnly`：tsc + eslint + vite build 全过。
+
+## 2026-09-21 逐请求日志扩展：chat 路径提取模型名与请求体大小
+
+### 背景
+
+面板逐请求行只能看到 `方法 路径 → 状态码 · 耗时`，同一路径下无法区分请求了哪个模型、体量多大。
+用户希望 `*/chat/completions` 请求额外展示**模型名**与**请求体大小**。
+
+### 决策
+
+- **元信息而非内容**：只提取 `model` 顶层字段与 `len(body)` 字节数，不解析/不保留 messages 正文，仍守第 9 节「详细日志不进面板」红线。
+- **仅 chat 路径、仅有钩子时预读**：`isChat = POST && path 含 /chat/completions`；非 chat 或无面板钩子时**不读 body**，保持流式转发零额外缓冲。
+- **复用一次预读**：并发限流的 `EstimateTokens` 与模型提取共用同一次 `peekBody`（原本仅在 concurrency 启用时才读），避免重复缓冲。
+- **不新增配置项**：沿用方案 A 思路，免去九处同步。
+
+### 改动
+
+1. **server/requestlog.go**：`RequestEvent` 加 `Model string` + `BodyBytes int`。
+2. **server/server.go**：`handleProxy` 前置 `model`/`bodyBytes` 声明（供 defer 上报），按 `isChat` 预读 body 并 `extractModelName`（仅反序列化 `model` 字段）；并发限流改用同一份 `peeked`。
+3. **app/app.go**：`RequestLogFunc` 签名追加 `model string, bodyBytes int`；`newRequestForwarder` 透传。
+4. **GUI app.go**：`addRequestLog` 追加 ` · <model> · <size>` 段；新增 `formatBytes`（B/KB/MB，纯 ASCII）。
+
+### 验证
+
+- server 新增 3 测（chat 提取、非 chat 不读、非法 JSON 兜底）+ app 钩子测追加模型/大小断言，全绿；`go test ./... -count=1`、`go vet ./...`、`gofmt -l .` 全过。
+
 ## 2026-09-21 GUI 日志面板显示逐请求基础信息（方案 A：开关控制，无新配置项）
 
 ### 背景

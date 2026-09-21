@@ -666,6 +666,15 @@ input::placeholder {
     color: var(--text-faint);
 }
 
+/* 配置总览：一句话说明当前生效的整体配置 */
+.config-summary {
+    margin-top: 10px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-faint);
+    word-break: break-word;
+}
+
 /* ---------- 日志 ---------- */
 .log-panel {
     flex: 1;

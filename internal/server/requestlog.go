@@ -11,13 +11,17 @@ import (
 //
 // 只包含方法、路径、最终响应状态码、总耗时与是否发生限流排队，
 // **不含请求/响应头与 body**，符合「详细日志不进面板」的敏感信息红线。
+// Model/BodyBytes 是 chat 请求的元信息（模型名与请求体字节数），
+// 同样不含消息内容，非 chat 路径不提取、保持零值。
 type RequestEvent struct {
-	Method   string        // 请求方法
-	Path     string        // 请求路径（原样，不含 query）
-	Status   int           // 客户端最终收到的响应状态码
-	Elapsed  time.Duration // 从进入处理到响应写出的总耗时
-	Waited   bool          // 是否因限流发生过排队（等待时长超过阈值）
-	WaitTime time.Duration // 限流等待累计时长
+	Method    string        // 请求方法
+	Path      string        // 请求路径（原样，不含 query）
+	Status    int           // 客户端最终收到的响应状态码
+	Elapsed   time.Duration // 从进入处理到响应写出的总耗时
+	Waited    bool          // 是否因限流发生过排队（等待时长超过阈值）
+	WaitTime  time.Duration // 限流等待累计时长
+	Model     string        // chat 请求的模型名（非 chat 或提取失败时为空）
+	BodyBytes int           // chat 请求体字节数（非 chat 路径为 0）
 }
 
 // requestWaitMarkThreshold 是判定「本请求发生过排队」的最小等待时长。
